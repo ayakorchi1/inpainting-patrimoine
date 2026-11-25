@@ -1,6 +1,6 @@
 """Métriques d'évaluation.
 
-Identiques à notebooks/02-baseline-opencv (1).ipynb.
+Identiques à notebooks/02_baseline_opencv.ipynb.
 Images attendues : uint8 (H, W, 3), valeurs 0-255.
 """
 import numpy as np

@@ -36,7 +36,7 @@ Environnement local : Windows + PowerShell.
 
 ## Déjà fait
 - `notebooks/01_exploration_preparation.ipynb` : exploration, sélection des 983 `true`, redimensionnement 128×128, masques de test.
-- `notebooks/02-baseline-opencv (1).ipynb` : baseline OpenCV Telea/NS. PSNR dans le trou ≈ 12 dB ; SSIM 0,91 → 0,61 de 10 % à 40 % de trou. Résultats dans `results/`.
+- `notebooks/02_baseline_opencv.ipynb` : baseline OpenCV Telea/NS. PSNR dans le trou ≈ 12 dB ; SSIM 0,91 → 0,61 de 10 % à 40 % de trou. Résultats dans `results/`.
 
 ## À faire
 - GAN, VQ-VAE + PixelCNN, LPIPS / diversité / mémoire GPU, démo Gradio, docs/, rapport.
