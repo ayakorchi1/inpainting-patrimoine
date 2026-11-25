@@ -6,7 +6,7 @@ Pour les récupérer : `python data/download.py` (voir plus bas).
 ## Source
 - Dataset Kaggle : [anassiguedmi/moroccan-zellige](https://www.kaggle.com/datasets/anassiguedmi/moroccan-zellige)
 - 1 560 images 256×256, réparties en dossiers `train / validation / test`, chacun séparé en `true` et `false`.
-- **Licence : À COMPLÉTER**
+- **Licence :** ODbL 1.0 pour la base de données, DbCL 1.0 pour le contenu (Open Data Commons). Usage autorisé avec citation de la source. Réserve : les images semblent provenir du web (filigranes visibles) ; l'auteur du dataset n'est probablement pas l'auteur de chaque photo, les droits individuels ne sont donc pas garantis. Les images ne sont pas redistribuées dans ce dépôt. Détails : [docs/licences.md](../docs/licences.md).
 
 ## Sélection : 983 images `true`
 - `true` = vrais zelliges ; `false` = autres images (motifs non zellige, objets, imitations…).
