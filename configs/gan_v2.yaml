@@ -1,0 +1,34 @@
+# Hyperparamètres du GAN v2 (lus par src/train_gan.py)
+# Identique à gan.yaml (v1) sauf : dilatation activée, 300 epochs, sélection sur le SSIM, nom d'expérience.
+
+experience: gan_v2       # préfixe/suffixe des fichiers produits (gan_v2_meilleur.pt, historique_gan_v2.csv...)
+graine: 42
+
+donnees:
+  taille: 128
+  num_workers: 2
+
+modele:
+  base_generateur: 64
+  base_discriminateur: 64
+  dilatation: true               # v2 : blocs résiduels dilatés au niveau 16x16
+  dilatations: [2, 4, 8, 16]
+
+entrainement:
+  batch: 32
+  epochs: 300                    # v1 : 150 ; la L1 baissait encore à la fin
+  lr: 0.0002
+  beta1: 0.5
+  beta2: 0.999
+  poids_l1: 100
+  poids_adverse: 1
+
+evaluation:
+  tous_les: 10
+  masque_type: central
+  masque_ratio: 0.20
+  graine_bruit: 0
+  critere_selection: ssim        # v1 : psnr (trop bruité d'une évaluation à l'autre)
+
+sorties:
+  dossier: /kaggle/working

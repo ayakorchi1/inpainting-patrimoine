@@ -37,9 +37,10 @@ Environnement local : Windows + PowerShell.
   - `src/masks.py` : `masque_central`, `masque_carre`, `masque_irregulier`, `creer_masque`, `masque_aleatoire` (entraînement : type au hasard, taille 5-45 %).
   - `src/metrics.py` : `psnr_trou` (PSNR sur les pixels du trou uniquement), `ssim_img`, `diversite_trou` (écart moyen entre propositions dans le trou, échelle 0-255).
   - `src/data.py` : `ZelligeDataset` (npz → [-1, 1], augmentation flips/rot90 sur train seulement, masque aléatoire neuf à chaque appel ou masques fixes), `trouver_npz`, `vers_tenseur`, `vers_uint8`.
-  - `src/models/gan.py` : `Generateur` (U-Net compact, entrée 5 canaux = image trouée + masque + bruit, sortie tanh composée avec les pixels connus) et `Discriminateur` (PatchGAN 14×14, normalisation spectrale, entrée image + masque).
-  - `src/train_gan.py` : `entrainer(config, npz)` (L1 trou × 100 + hinge ; éval PSNR/SSIM val toutes les 10 epochs, masque central 20 % fixe), `completer`, `generer`.
-- `configs/` : un fichier YAML d'hyperparamètres par méthode (`gan.yaml`).
+  - `src/models/gan.py` : `Generateur` (U-Net compact, entrée 5 canaux = image trouée + masque + bruit, sortie tanh composée avec les pixels connus ; option `dilatation=True` (v2) = blocs résiduels dilatés au niveau 16×16, créés en dernier et seulement si activés → la v1 reste strictement identique), `Discriminateur` (PatchGAN 14×14, normalisation spectrale, entrée image + masque), `creer_generateur(cfg["modele"])`.
+  - `src/train_gan.py` : `entrainer(config, npz)` (L1 trou × 100 + hinge ; éval PSNR/SSIM val toutes les 10 epochs, masque central 20 % fixe), `charger_generateur(pt)`, `completer`, `generer`. Options de config facultatives : `experience` (nom dans les fichiers produits ; absent = noms d'origine v1 `gan_meilleur.pt`, `historique_gan.csv`, `memoire_gpu.json`) et `evaluation.critere_selection` (`psnr` par défaut, ou `ssim`).
+- `configs/` : un fichier YAML d'hyperparamètres par expérience (`gan.yaml` = v1, à ne pas modifier ; `gan_v2.yaml`).
+- **Ne jamais changer le comportement d'une version déjà entraînée** : toute nouveauté passe par une option désactivée par défaut + une nouvelle config.
 - Sorties d'entraînement (`.pt`, CSV, JSON mémoire GPU) écrites dans `/kaggle/working`, **jamais dans Git**. Seuls les CSV/PNG légers sont recopiés à la main dans `results/`.
 - Les notebooks Kaggle commencent par `git clone` du dépôt + `sys.path`, puis `trouver_npz` pour localiser les données dans `/kaggle/input`.
 - `data/download.py` : téléchargement via l'API Kaggle.
@@ -51,5 +52,7 @@ Environnement local : Windows + PowerShell.
 - `notebooks/03_gan.ipynb` : **GAN v1 entraîné** (150 epochs, 18 min, pic GPU 2,03 Go, meilleur modèle epoch 110). PSNR +0,47 dB en moyenne vs Telea (9/9 configs), SSIM légèrement meilleur, 1,9 ms/image. Diversité faible (7-10/255) : propositions presque identiques. Visuel : bonne texture et bonnes couleurs, mais quadrillage, pas d'étoiles, raccord visible. Fichiers : `results/*_v1.*`.
 - Convention : les résultats d'une version de modèle sont suffixés `_vN` dans `results/` (ex. `resultats_gan_v1.csv`, `memoire_gpu_gan_v1.json`). Les fichiers enregistrés depuis le navigateur peuvent arriver avec une extension `.txt` : vérifier l'extension et le contenu.
 
+- `notebooks/03b_gan_v2.ipynb` : **GAN v2 prêt, pas encore lancé sur Kaggle**. Config `configs/gan_v2.yaml` : dilatations [2, 4, 8, 16], 300 epochs, sélection sur SSIM, `experience: gan_v2`. G = 10,07 M paramètres (v1 : 5,34 M), activations +210 Mo → pic attendu ≈ 2,3 Go. Notebook : fichiers `_v2`, tableau Telea / v1 (lu dans `results/`) / v2 (PSNR, SSIM, diversité), grille v2 + image v1 côte à côte. Note : la dilatation 16 sur une carte 16×16 équivaut à une convolution 1×1 (vérifié).
+
 ## À faire
-- VQ-VAE + PixelCNN ; LPIPS ; éventuel GAN v2 (entraînement plus long, sélection sur SSIM/LPIPS, diversité) ; démo Gradio ; docs/ (fiche modèle, éthique) ; rapport.
+- Lancer le GAN v2 sur Kaggle, puis reporter les résultats dans `results/*_v2.*` et `docs/explications.md` ; VQ-VAE + PixelCNN ; LPIPS ; démo Gradio ; docs/ (fiche modèle, éthique) ; rapport.

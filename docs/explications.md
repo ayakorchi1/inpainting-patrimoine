@@ -367,6 +367,63 @@ Même protocole que la baseline : 143 images de test × 9 masques fixes, bruit f
    Mais il ne reconstruit pas encore la géométrie (pas d'étoiles, raccord visible). Je présente donc ce résultat honnêtement,
    comme une amélioration partielle. La L1 encore en baisse à l'epoch 150 montre qu'un entraînement plus long aiderait.
 
+### GAN v2 : ce qu'on change et pourquoi
+
+> Statut : code prêt et testé sur CPU (une itération). **Entraînement sur Kaggle à lancer**
+> (`notebooks/03b_gan_v2.ipynb`, config `configs/gan_v2.yaml`). Pas encore de résultats.
+
+La v2 s'attaque aux défauts observés sur la v1. **Une seule architecture change** ; tout le reste (données, masques,
+pertes, poids L1 = 100, taux d'apprentissage, graine 42, protocole de test) est identique, pour que la comparaison soit juste.
+La v1 n'est pas modifiée : son code, sa config et ses résultats restent valables.
+
+| Changement | Défaut v1 visé | Pourquoi ça devrait aider |
+|---|---|---|
+| **Blocs résiduels à convolutions dilatées** (dilatations 2, 4, 8, 16) au niveau 16×16 du U-Net | Pas d'étoiles, pas de lignes qui se prolongent, raccord visible | Pour dessiner une étoile au centre d'un grand trou, le réseau doit « voir » les morceaux d'étoiles **de l'autre côté du trou**. Les blocs dilatés agrandissent ce qu'il voit (son champ réceptif) sans réduire encore l'image. |
+| **300 epochs** au lieu de 150 | La L1 baissait encore à l'epoch 150 | Le modèle v1 n'avait pas fini d'apprendre. |
+| **Sélection du meilleur modèle sur le SSIM** au lieu du PSNR | Le PSNR de validation oscillait de ±0,2 dB sans tendance ; l'epoch 110 était en partie due au hasard | Le SSIM de validation montait régulièrement : c'est un critère plus stable, et plus proche de la perception de la structure. |
+
+#### Notions clés
+- **Champ réceptif :** la zone de l'image d'entrée qu'un « neurone » du réseau peut voir. Si elle est plus petite que le trou,
+  le centre du trou est rempli « à l'aveugle », sans information venant des bords : c'est ce qui donne le grain uniforme de la v1.
+- **Convolution dilatée :** un filtre 3×3 normal regarde 9 pixels voisins collés. Un filtre dilaté de 4 regarde aussi 9 points,
+  mais **espacés de 4 pixels**. Il voit donc une zone de 9×9 avec le même nombre de paramètres. En enchaînant des dilatations
+  2, 4 et 8, la vue s'élargit très vite.
+- **Bloc résiduel :** le bloc calcule une **correction** qu'on ajoute à son entrée (sortie = entrée + correction), au lieu
+  de tout recalculer. Au début de l'entraînement, il laisse passer l'information sans l'abîmer, ce qui rend stable l'empilement de plusieurs blocs.
+- **Pourquoi au niveau 16×16 :** à ce niveau, chaque case résume un carré de 8×8 pixels de l'image. Une dilatation de 8
+  y couvre donc une grande partie de l'image. Plus bas (8×8, 4×4), l'image est trop réduite pour garder la position des motifs.
+
+#### Ce que ça coûte (mesuré sur CPU, batch 32)
+- Paramètres du générateur : **10,07 M** au lieu de 5,34 M (+4,72 M, soit ×1,9). Discriminateur inchangé (2,77 M).
+- Mémoire des activations du générateur : **1,33 Go** au lieu de 1,12 Go (+210 Mo). Poids + optimiseur Adam : 0,20 Go au lieu de 0,13 Go.
+- On peut donc s'attendre à un pic d'environ **2,3 Go** sur GPU (v1 mesurée : 2,03 Go), bien sous la limite de 12 Go.
+  La valeur réelle sera relevée dans `memoire_gpu_gan_v2.json`.
+- Temps : environ 2 fois plus d'epochs et un réseau un peu plus lourd, donc **environ 40 min** à prévoir (v1 : 18 min).
+
+#### Point d'attention : la dilatation 16
+Sur une carte de 16×16 cases, un filtre dilaté de 16 place ses 8 points extérieurs **à 16 cases du centre, donc toujours
+en dehors de la carte**, dans le remplissage à zéro. Il ne voit donc que la case centrale et se comporte comme un simple
+mélange de canaux (convolution 1×1). Je l'ai vérifié numériquement. Ce bloc n'est pas nuisible, mais il n'élargit pas la vue.
+Les dilatations 2, 4 et 8 suffisent déjà : à elles trois, elles couvrent toute la carte 16×16, donc toute l'image.
+J'ai gardé 2, 4, 8, 16 comme prévu. La liste est réglable dans `configs/gan_v2.yaml` (`dilatations`) si l'on veut tester [1, 2, 4, 8].
+
+#### Ce que la v2 ne corrige pas
+- **La diversité.** Rien dans la v2 n'oblige le générateur à utiliser le bruit, donc les 4 propositions risquent de rester
+  presque identiques. C'est un choix délibéré : on change **une chose à la fois** pour savoir ce qui a un effet.
+  La diversité est le rôle du VQ-VAE + PixelCNN.
+
+#### Questions probables du jury (v2)
+1. **« Pourquoi des convolutions dilatées plutôt qu'un réseau plus profond ? »**
+   Réduire encore l'image (8×8, 4×4) fait perdre la position précise des motifs. La dilatation élargit la vue **sans réduire l'image**
+   et avec peu de paramètres en plus. C'est une technique standard en inpainting (par exemple dans le modèle de référence d'Iizuka et al., 2017).
+2. **« Pourquoi avoir changé trois choses en même temps ? Comment savoir laquelle a aidé ? »**
+   Une seule touche le modèle (les blocs dilatés). Les deux autres corrigent la façon d'entraîner : la durée, parce que la v1
+   n'avait pas fini d'apprendre, et le critère de choix, parce que le PSNR était trop bruité. Pour isoler l'effet des blocs dilatés,
+   il faudrait aussi entraîner une v1 sur 300 epochs. C'est une limite que j'assume, faute de temps de calcul.
+3. **« Pourquoi choisir le meilleur modèle sur le SSIM et pas sur le PSNR ? »**
+   Sur la v1, le PSNR de validation sautait de ±0,2 dB d'une évaluation à l'autre sans tendance, alors que le SSIM montait
+   régulièrement. Choisir sur une mesure aussi bruitée revient en partie à tirer au sort. Le SSIM est plus stable et mesure la structure.
+
 ## 5) VQ-VAE + PixelCNN — *à compléter*
 
 ## 6) Comparaison finale (PSNR, SSIM, LPIPS, diversité, temps, mémoire GPU) — *à compléter*

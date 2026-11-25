@@ -49,10 +49,37 @@ class BlocMontee(nn.Module):
         return self.bloc(x)
 
 
-class Generateur(nn.Module):
-    """U-Net compact : 128 -> 64 -> 32 -> 16 -> 8 -> 4 puis remontée avec connexions de saut."""
+class BlocResiduelDilate(nn.Module):
+    """Bloc résiduel à convolution dilatée (v2).
 
-    def __init__(self, base=64):
+    La convolution dilatée « écarte » les points regardés par le filtre (de `dilatation` pixels) :
+    même nombre de paramètres, mais elle voit beaucoup plus loin. Le raccourci résiduel (x + ...)
+    permet d'empiler ces blocs sans gêner l'apprentissage.
+    """
+
+    def __init__(self, c, dilatation):
+        super().__init__()
+        self.bloc = nn.Sequential(
+            nn.Conv2d(c, c, 3, 1, padding=dilatation, dilation=dilatation, bias=False),
+            nn.BatchNorm2d(c),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(c, c, 3, 1, 1, bias=False),
+            nn.BatchNorm2d(c),
+        )
+        self.activation = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        return self.activation(x + self.bloc(x))
+
+
+class Generateur(nn.Module):
+    """U-Net compact : 128 -> 64 -> 32 -> 16 -> 8 -> 4 puis remontée avec connexions de saut.
+
+    v1 : Generateur(base=64)                         (comportement d'origine, inchangé)
+    v2 : Generateur(base=64, dilatation=True)        (blocs dilatés au niveau 16x16)
+    """
+
+    def __init__(self, base=64, dilatation=False, dilatations=(2, 4, 8, 16)):
         super().__init__()
         b = base
         self.d1 = BlocDescente(5, b, norm=False)     # 64x64
@@ -68,6 +95,12 @@ class Generateur(nn.Module):
         self.u5 = BlocMontee(2 * b, b)               # 128x128 (u4 + d1)
         self.sortie = nn.Sequential(nn.Conv2d(b, 3, 3, 1, 1), nn.Tanh())
 
+        # v2 : créés en dernier et seulement si demandé -> la v1 garde exactement
+        # les mêmes couches, la même initialisation et les mêmes clés de sauvegarde.
+        self.dilate = None
+        if dilatation:
+            self.dilate = nn.Sequential(*[BlocResiduelDilate(4 * b, d) for d in dilatations])
+
     def forward(self, image_trouee, masque, bruit=None):
         """Renvoie (image_finale, sortie_brute).
 
@@ -80,6 +113,8 @@ class Generateur(nn.Module):
         e1 = self.d1(x)
         e2 = self.d2(e1)
         e3 = self.d3(e2)
+        if self.dilate is not None:
+            e3 = self.dilate(e3)                     # v2 : contexte élargi, utilisé ensuite partout
         e4 = self.d4(e3)
         e5 = self.d5(e4)
 
@@ -116,6 +151,13 @@ class Discriminateur(nn.Module):
 
     def forward(self, image, masque):
         return self.reseau(torch.cat([image, masque], dim=1))
+
+
+def creer_generateur(cfg_modele):
+    """Construit le générateur à partir de la section `modele` d'une config (v1 ou v2)."""
+    return Generateur(cfg_modele["base_generateur"],
+                      dilatation=cfg_modele.get("dilatation", False),
+                      dilatations=tuple(cfg_modele.get("dilatations", (2, 4, 8, 16))))
 
 
 def compter_parametres(modele):
