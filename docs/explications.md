@@ -208,7 +208,87 @@ SSIM moyen (image entière), méthode Telea :
 
 ---
 
-## 4) GAN — *à compléter*
+## 4) GAN d'inpainting
+
+> Statut : code prêt et testé sur CPU (une itération). **Entraînement complet sur Kaggle à lancer** ;
+> les résultats chiffrés seront ajoutés ici ensuite.
+
+### Ce qu'on a fait
+- `src/data.py` : prépare les images pour PyTorch. Il passe les pixels de 0-255 à **-1 / +1**, applique des
+  **retournements et rotations** (entraînement seulement) et associe à chaque image un **nouveau masque aléatoire** à chaque passage.
+- `src/models/gan.py` : deux réseaux.
+  - **Générateur** (U-Net) : il reçoit l'image trouée, le masque et une image de **bruit**, puis dessine le contenu du trou.
+  - **Discriminateur** (PatchGAN) : il regarde une image et juge, zone par zone, si elle est « vraie » ou « fabriquée ».
+- `configs/gan.yaml` : tous les réglages (taille 128, batch 32, 150 epochs, Adam lr 0,0002, poids L1 = 100, poids adverse = 1, graine 42).
+- `src/train_gan.py` : la boucle d'entraînement. Toutes les 10 epochs, le script mesure PSNR/SSIM sur la validation avec un masque fixe,
+  garde le meilleur modèle, enregistre l'historique des pertes et le **pic de mémoire GPU**.
+- `notebooks/03_gan.ipynb` : entraînement sur Kaggle, courbes, évaluation sur les **mêmes 143 images × 9 masques** que la baseline,
+  mesure de diversité (4 propositions par image) et figures.
+
+### Principe du GAN (sans jargon)
+Un GAN, c'est un **duel entre deux réseaux** :
+- le **générateur** est un faussaire : il remplit le trou ;
+- le **discriminateur** est un expert : il essaie de repérer les images retouchées.
+
+À chaque tour, l'expert s'améliore pour démasquer le faussaire, et le faussaire s'améliore pour tromper l'expert.
+À la fin, le générateur produit des remplissages assez réalistes pour que l'expert ne fasse plus la différence.
+
+Si l'on ne demandait que « tromper l'expert », le faussaire pourrait inventer n'importe quel joli motif sans rapport avec l'image.
+On ajoute donc une deuxième consigne, la **perte L1** : « ressemble à l'original dans le trou ».
+Les deux consignes se complètent. La L1 apporte la fidélité (bonnes couleurs, bonne continuité), et le duel apporte la
+netteté (des motifs francs au lieu du flou).
+
+### Choix techniques et pourquoi
+| Choix | Pourquoi |
+|---|---|
+| **U-Net** (générateur) | Il réduit l'image pour en comprendre la structure globale, puis la regrandit. Les **connexions de saut** recopient les détails fins des bords, ce qui assure un raccord propre avec les pixels connus. « Compact » : 5,3 millions de paramètres (et 2,8 millions pour le discriminateur), ce qui tient largement dans 12 Go. |
+| **5 canaux en entrée** | Image trouée (3 couleurs) + **masque** (pour savoir *où* inventer) + **bruit** (pour pouvoir donner *plusieurs* réponses différentes). |
+| **Sortie tanh, images en [-1, 1]** | tanh donne des valeurs entre -1 et 1 ; on met les images à la même échelle. |
+| **Composition finale** | On garde les pixels connus tels quels et on ne prend le résultat du générateur **que dans le trou**. Le réseau ne peut pas abîmer ce qui était intact. |
+| **PatchGAN** (discriminateur) | Au lieu d'une seule note pour toute l'image, il donne une note pour chaque zone (grille 14×14). Il juge ainsi la **texture locale** (les motifs du zellige), ce qui est exactement ce qu'on veut rendre réaliste. Il reçoit aussi le masque pour savoir où regarder. |
+| **Normalisation spectrale** | Elle empêche le discriminateur de devenir trop sévère trop vite. Sinon, le générateur ne reçoit plus de signal utile et l'entraînement s'effondre. C'est un « frein » qui stabilise le duel. |
+| **Perte hinge** | Une manière de noter le duel : on ne punit que les erreurs franches. Elle est stable et couramment associée à la normalisation spectrale. |
+| **L1 × 100, adverse × 1** | La fidélité est prioritaire (réglage classique du modèle pix2pix) ; le duel ajoute la netteté. La L1 est calculée **dans le trou seulement**. |
+| **Adam, lr 0,0002, betas 0,5 / 0,999** | Réglages standards pour les GAN ; un beta1 bas rend l'optimiseur plus réactif dans le duel. |
+| **Augmentation** (retournements, rotations de 90°) | Les zelliges sont souvent symétriques : une rotation donne une nouvelle image tout aussi valable. On multiplie ainsi artificiellement les 697 images, ce qui limite le sur-apprentissage. Seulement sur l'entraînement, pour garder une évaluation honnête. |
+| **Masque aléatoire neuf à chaque passage** | Le modèle voit des milliers de trous différents (forme et taille 5-45 %). Il apprend à gérer n'importe quel trou, y compris celui dessiné dans la démo. |
+| **Évaluation avec masque et bruit fixes** | Pour que les mesures d'une epoch à l'autre soient comparables : seul le modèle change. |
+| **Mémoire GPU mesurée** | Pour vérifier la contrainte du guide (12 Go max), avec `torch.cuda.max_memory_allocated`. |
+
+### Notions clés
+- **Epoch :** un passage complet sur les 697 images d'entraînement. 150 epochs = le modèle voit chaque image 150 fois
+  (avec à chaque fois une rotation et un trou différents).
+- **Batch :** le nombre d'images traitées ensemble (32) avant de corriger le réseau.
+- **Perte (loss) :** un nombre qui dit « à quel point le réseau se trompe ». L'entraînement consiste à le faire baisser.
+- **Effondrement de modes (mode collapse) :** risque connu des GAN. Le générateur apprend à **ignorer le bruit** et donne
+  toujours la même réponse. C'est pour le détecter qu'on mesure la diversité (cellule 5) : un score proche de 0 signale ce problème.
+- **Diversité :** on génère 4 propositions avec 4 bruits différents et on mesure de combien elles diffèrent entre elles dans le trou
+  (en niveaux de 0 à 255).
+
+### Résultats et interprétation
+*À compléter après l'entraînement sur Kaggle :*
+- PSNR / SSIM sur le test (9 masques), comparés à Telea (≈ 12 dB ; SSIM 0,91 → 0,61) ;
+- diversité des 4 propositions ;
+- temps par image et pic de mémoire GPU ;
+- observations visuelles (`gan_exemples.png`, `gan_propositions.png`).
+
+À quoi s'attendre : le GAN devrait produire des motifs plus nets que Telea. Le PSNR peut ne progresser que modérément,
+car il pénalise un motif net mais légèrement décalé (voir les limites du PSNR, section 3). La diversité risque d'être faible :
+c'est une faiblesse connue de ce type de GAN, et ce qui motive le VQ-VAE + PixelCNN, conçu pour échantillonner plusieurs solutions.
+
+### Questions probables du jury
+1. **« Pourquoi deux pertes (L1 et adverse) et pas une seule ? »**
+   Avec seulement la L1, le réseau apprend à produire la **moyenne** de toutes les possibilités, ce qui donne une zone floue
+   (comme Telea, en mieux). Avec seulement la perte adverse, il produit des motifs nets mais sans lien avec l'image.
+   Ensemble : fidèle **et** net. Le poids 100 pour la L1 vient du modèle de référence pix2pix.
+2. **« Comment obtenez-vous plusieurs propositions différentes ? »**
+   Grâce au canal de **bruit** en entrée : un bruit différent donne une complétion différente. Je l'ai vérifié en mesurant
+   l'écart entre 4 propositions. Si cet écart est faible, c'est l'effondrement de modes, un défaut connu des GAN conditionnels.
+   C'est justement ce que le VQ-VAE + PixelCNN doit améliorer.
+3. **« Comment savez-vous que l'entraînement s'est bien passé, et qu'il respecte la limite de 12 Go ? »**
+   Je suis les courbes de pertes (le duel doit rester équilibré, aucune des deux pertes ne doit s'effondrer à 0), le PSNR de
+   validation toutes les 10 epochs (je garde le meilleur modèle) et les exemples visuels. La mémoire est mesurée par
+   `torch.cuda.max_memory_allocated` et enregistrée dans `memoire_gpu.json`.
 
 ## 5) VQ-VAE + PixelCNN — *à compléter*
 

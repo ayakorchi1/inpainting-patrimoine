@@ -17,3 +17,18 @@ def psnr_trou(orig, rest, m):
 def ssim_img(orig, rest):
     """SSIM sur l'image entière (couleur)."""
     return ssim(orig, rest, channel_axis=2, data_range=255)
+
+
+def diversite_trou(propositions, m):
+    """Écart moyen entre plusieurs propositions pour une même image, dans le trou.
+
+    propositions : liste de K images uint8 (H, W, 3) ; m : masque (H, W), 1 = trou.
+    Renvoie la différence absolue moyenne (échelle 0-255) sur toutes les paires.
+    0 = propositions identiques (aucune diversité).
+    """
+    ecarts = []
+    for a in range(len(propositions)):
+        for b in range(a + 1, len(propositions)):
+            diff = np.abs(propositions[a].astype(np.float32) - propositions[b].astype(np.float32))
+            ecarts.append(diff[m == 1].mean())
+    return float(np.mean(ecarts))

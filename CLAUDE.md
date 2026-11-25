@@ -35,12 +35,20 @@ Environnement local : Windows + PowerShell.
 - Les entraînements tournent sur **Kaggle (GPU)**.
 - Le code réutilisable est dans `src/` ; les notebooks l'importent (ne pas dupliquer le code dans les notebooks).
   - `src/masks.py` : `masque_central`, `masque_carre`, `masque_irregulier`, `creer_masque`, `masque_aleatoire` (entraînement : type au hasard, taille 5-45 %).
-  - `src/metrics.py` : `psnr_trou` (PSNR sur les pixels du trou uniquement), `ssim_img`.
+  - `src/metrics.py` : `psnr_trou` (PSNR sur les pixels du trou uniquement), `ssim_img`, `diversite_trou` (écart moyen entre propositions dans le trou, échelle 0-255).
+  - `src/data.py` : `ZelligeDataset` (npz → [-1, 1], augmentation flips/rot90 sur train seulement, masque aléatoire neuf à chaque appel ou masques fixes), `trouver_npz`, `vers_tenseur`, `vers_uint8`.
+  - `src/models/gan.py` : `Generateur` (U-Net compact, entrée 5 canaux = image trouée + masque + bruit, sortie tanh composée avec les pixels connus) et `Discriminateur` (PatchGAN 14×14, normalisation spectrale, entrée image + masque).
+  - `src/train_gan.py` : `entrainer(config, npz)` (L1 trou × 100 + hinge ; éval PSNR/SSIM val toutes les 10 epochs, masque central 20 % fixe), `completer`, `generer`.
+- `configs/` : un fichier YAML d'hyperparamètres par méthode (`gan.yaml`).
+- Sorties d'entraînement (`.pt`, CSV, JSON mémoire GPU) écrites dans `/kaggle/working`, **jamais dans Git**. Seuls les CSV/PNG légers sont recopiés à la main dans `results/`.
+- Les notebooks Kaggle commencent par `git clone` du dépôt + `sys.path`, puis `trouver_npz` pour localiser les données dans `/kaggle/input`.
 - `data/download.py` : téléchargement via l'API Kaggle.
+- Tests locaux : PyTorch n'est pas installé sur le PC ; tester sur CPU avec de fausses données (une itération), sans lancer l'entraînement complet.
 
 ## Déjà fait
 - `notebooks/01_exploration_preparation.ipynb` : exploration, sélection des 983 `true`, redimensionnement 128×128, masques de test.
 - `notebooks/02_baseline_opencv.ipynb` : baseline OpenCV Telea/NS. PSNR dans le trou ≈ 12 dB ; SSIM 0,91 → 0,61 de 10 % à 40 % de trou. Résultats dans `results/`.
+- `notebooks/03_gan.ipynb` : code du GAN prêt (entraînement, courbes, test 9 masques, diversité 4 propositions, figures). **Pas encore lancé sur Kaggle** : résultats à reporter dans `results/` et dans `docs/explications.md` (section 4).
 
 ## À faire
-- GAN, VQ-VAE + PixelCNN, LPIPS / diversité / mémoire GPU, démo Gradio, docs/, rapport.
+- Lancer le GAN sur Kaggle et reporter les résultats ; VQ-VAE + PixelCNN ; LPIPS ; démo Gradio ; docs/ (fiche modèle, éthique) ; rapport.

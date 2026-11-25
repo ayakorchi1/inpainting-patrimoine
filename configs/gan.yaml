@@ -1,0 +1,29 @@
+# Hyperparamètres du GAN d'inpainting (lus par src/train_gan.py)
+
+graine: 42
+
+donnees:
+  taille: 128            # images 128x128
+  num_workers: 2         # processus de chargement (Kaggle : 2 à 4)
+
+modele:
+  base_generateur: 64    # nombre de filtres de la 1re couche du U-Net
+  base_discriminateur: 64
+
+entrainement:
+  batch: 32
+  epochs: 150
+  lr: 0.0002             # Adam, même taux pour G et D
+  beta1: 0.5
+  beta2: 0.999
+  poids_l1: 100          # perte L1 dans le trou (fidélité)
+  poids_adverse: 1       # perte hinge (réalisme)
+
+evaluation:
+  tous_les: 10           # évaluer sur la validation toutes les 10 epochs
+  masque_type: central   # masque fixe identique pour toutes les évaluations
+  masque_ratio: 0.20
+  graine_bruit: 0        # bruit fixe pour l'évaluation (résultats comparables)
+
+sorties:
+  dossier: /kaggle/working   # modèles et CSV (jamais dans Git)
