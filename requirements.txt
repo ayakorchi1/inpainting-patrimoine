@@ -1,0 +1,21 @@
+# Données et images
+numpy>=1.24
+Pillow>=9.5
+opencv-python>=4.8
+scikit-image>=0.21
+pandas>=2.0
+matplotlib>=3.7
+tqdm>=4.65
+
+# Apprentissage profond (GAN, VQ-VAE + PixelCNN)
+torch>=2.0
+torchvision>=0.15
+
+# Évaluation perceptuelle
+lpips>=0.1.4
+
+# Démo
+gradio>=4.0
+
+# Téléchargement du dataset
+kaggle>=1.6
