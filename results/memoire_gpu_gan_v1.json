@@ -1,0 +1,8 @@
+{
+  "pic_memoire_gpu_Go": 2.03,
+  "limite_Go": 12,
+  "respecte_limite": true,
+  "device": "cuda",
+  "minutes": 18.22,
+  "meilleur_psnr_val": 12.05784797668457
+}

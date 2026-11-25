@@ -210,8 +210,7 @@ SSIM moyen (image entière), méthode Telea :
 
 ## 4) GAN d'inpainting
 
-> Statut : code prêt et testé sur CPU (une itération). **Entraînement complet sur Kaggle à lancer** ;
-> les résultats chiffrés seront ajoutés ici ensuite.
+> Statut : **GAN v1 entraîné sur Kaggle** (150 epochs, 18 min). Résultats dans `results/*_v1.*`.
 
 ### Ce qu'on a fait
 - `src/data.py` : prépare les images pour PyTorch. Il passe les pixels de 0-255 à **-1 / +1**, applique des
@@ -265,30 +264,108 @@ netteté (des motifs francs au lieu du flou).
 - **Diversité :** on génère 4 propositions avec 4 bruits différents et on mesure de combien elles diffèrent entre elles dans le trou
   (en niveaux de 0 à 255).
 
-### Résultats et interprétation
-*À compléter après l'entraînement sur Kaggle :*
-- PSNR / SSIM sur le test (9 masques), comparés à Telea (≈ 12 dB ; SSIM 0,91 → 0,61) ;
-- diversité des 4 propositions ;
-- temps par image et pic de mémoire GPU ;
-- observations visuelles (`gan_exemples.png`, `gan_propositions.png`).
+### Résultats (GAN v1)
+Fichiers : `results/resultats_gan_v1.csv`, `resultats_gan_diversite_v1.csv`, `historique_gan_v1.csv`,
+`memoire_gpu_gan_v1.json`, `gan_courbes_v1.png`, `gan_exemples_v1.png`, `gan_propositions_v1.png`.
+Même protocole que la baseline : 143 images de test × 9 masques fixes, bruit fixe (graine 0).
 
-À quoi s'attendre : le GAN devrait produire des motifs plus nets que Telea. Le PSNR peut ne progresser que modérément,
-car il pénalise un motif net mais légèrement décalé (voir les limites du PSNR, section 3). La diversité risque d'être faible :
-c'est une faiblesse connue de ce type de GAN, et ce qui motive le VQ-VAE + PixelCNN, conçu pour échantillonner plusieurs solutions.
+**PSNR dans le trou (dB) : GAN contre Telea**
+
+| Masque | 10 % | 20 % | 40 % |
+|---|---|---|---|
+| central | 12,32 (Telea 11,85, **+0,47**) | 12,06 (11,60, **+0,47**) | 12,02 (11,63, **+0,39**) |
+| carré | 12,48 (12,01, **+0,47**) | 12,24 (11,80, **+0,44**) | 12,07 (11,57, **+0,50**) |
+| irrégulier | 12,85 (12,47, **+0,37**) | 12,71 (12,16, **+0,55**) | 12,59 (11,98, **+0,61**) |
+
+→ Le GAN gagne sur **les 9 configurations**, en moyenne **+0,47 dB** (de +0,37 à +0,61 dB).
+
+**SSIM (image entière) : GAN contre Telea**
+
+| Masque | 10 % | 20 % | 40 % |
+|---|---|---|---|
+| central | 0,914 (0,909) | 0,817 (0,809) | 0,619 (0,608) |
+| carré | 0,915 (0,910) | 0,819 (0,812) | 0,619 (0,609) |
+| irrégulier | 0,917 (0,912) | 0,840 (0,830) | 0,673 (0,656) |
+
+→ Légèrement meilleur partout (+0,005 à +0,017). Le gain grandit avec la taille du trou.
+
+**Diversité des 4 propositions** (écart moyen dans le trou, échelle 0-255)
+
+| Masque | 10 % | 20 % | 40 % |
+|---|---|---|---|
+| central | 9,7 | 9,5 | 8,0 |
+| carré | 8,8 | 8,0 | 7,5 |
+| irrégulier | 7,1 | 7,0 | 7,1 |
+
+→ Entre **7 et 10 sur 255**, soit environ 3 à 4 % de la plage des couleurs. Pour comparer : l'erreur L1 finale
+(0,385 sur l'échelle [-1, 1]) correspond à environ **49 sur 255**. Les propositions diffèrent donc environ
+**5 fois moins entre elles qu'elles ne diffèrent de l'original**.
+
+**Coût**
+- Temps : **1,9 ms par image** sur GPU (contre environ 11 ms pour Telea sur CPU).
+- Mémoire : pic de **2,03 Go**, bien sous la limite de 12 Go.
+- Entraînement : **18 min** pour 150 epochs.
+
+**Entraînement** (`gan_courbes_v1.png`)
+- **Meilleur modèle à l'epoch 110** : PSNR de validation de 12,06 dB, SSIM de 0,819.
+- La **L1 baisse encore à l'epoch 150** (de 0,487 à 0,385, sans plateau) : le modèle **n'a pas fini d'apprendre**.
+- Le **PSNR de validation oscille** entre 11,66 et 12,06 dB, sans tendance nette, alors que le SSIM de validation
+  monte régulièrement (de 0,804 à 0,823). L'écart de l'epoch 110 sur ses voisines (environ 0,2 dB) est donc
+  en partie dû au hasard.
+- Le duel reste équilibré : la perte du discriminateur se stabilise autour de 0,6-0,7 et ne tombe pas à 0.
+  Le discriminateur ne « gagne » pas complètement.
+
+### Analyse visuelle (`gan_exemples_v1.png`, `gan_propositions_v1.png`)
+- ✅ **Texture et couleurs justes** : le GAN reprend la palette de l'image (beige, bleu-gris, brun). Telea, lui, étire
+  les couleurs des bords en rayons flous.
+- ❌ **Motif en quadrillage** : le trou est rempli d'un grain fin et régulier, une sorte de « bruit de zellige ».
+  On ne voit **aucune étoile**, aucune ligne qui continue, aucune forme géométrique.
+- ❌ **Mauvais raccord aux bords** : un cadre clair et flou marque nettement la limite du trou, surtout à 40 %.
+  Les lignes qui arrivent au bord du trou ne se prolongent pas à l'intérieur.
+- ❌ **4 propositions presque identiques** : même texture, mêmes couleurs, avec seulement de petites variations de grain.
+  Le générateur **ignore en grande partie le bruit** : c'est l'effondrement de modes annoncé plus haut.
+
+### Interprétation
+- **Le GAN fait mieux que Telea, mais de peu.** Il a appris « de quoi est fait » un zellige (couleurs, grain), mais pas
+  **comment il est construit** (étoiles, symétries, lignes continues). Les motifs du zellige sont grands par rapport
+  au trou et obéissent à une géométrie globale, qu'un petit U-Net entraîné 18 min sur 697 images ne capte pas.
+- **Pourquoi le PSNR reste bas (≈ 12 dB), même pour une complétion plausible.** Le PSNR compare chaque pixel à celui
+  de l'original, au même endroit. Imaginons un modèle qui dessinerait une étoile parfaite, mais **décalée** de
+  quelques pixels : là où l'original a une ligne blanche, il a du brun, et inversement. Sur un zellige très contrasté
+  (lignes beige clair sur fond brun foncé ou noir), chaque pixel décalé coûte une erreur énorme, de l'ordre de 150 à 200
+  sur 255. Cette étoile serait donc **plus pénalisée** qu'une bouillie grise moyenne, qui reste « à mi-chemin » de tout.
+  Le PSNR récompense la **prudence** (la moyenne), pas la **plausibilité**. C'est aussi pour cela que la L1 pousse
+  le GAN vers un grain moyen sans forme franche.
+- **Ce que cela implique :** les écarts de PSNR entre méthodes resteront faibles. Il faut ajouter **LPIPS** (perception)
+  et s'appuyer sur les **exemples visuels** pour juger la plausibilité.
+- **Diversité faible :** c'est la limite principale vis-à-vis de l'objectif (proposer 4 complétions différentes).
+  Elle motive le **VQ-VAE + PixelCNN**, qui **tire au hasard** chaque morceau de l'image dans une distribution apprise :
+  la diversité fait alors partie de la méthode, au lieu de dépendre d'un bruit que le réseau peut ignorer.
+
+### Pistes pour une version v2 (si le temps le permet)
+- Entraîner plus longtemps : la L1 n'a pas atteint de plateau.
+- Choisir le meilleur modèle sur le SSIM ou LPIPS plutôt que sur le PSNR, qui oscille trop.
+- Encourager la diversité : perte de « mode seeking » (pénaliser deux bruits différents qui donnent la même image)
+  ou bruit injecté à plusieurs niveaux du U-Net.
+- Améliorer le raccord : discriminateur qui juge aussi l'image entière, ou couches d'attention pour aller chercher
+  des motifs ailleurs dans l'image.
 
 ### Questions probables du jury
 1. **« Pourquoi deux pertes (L1 et adverse) et pas une seule ? »**
    Avec seulement la L1, le réseau apprend à produire la **moyenne** de toutes les possibilités, ce qui donne une zone floue
    (comme Telea, en mieux). Avec seulement la perte adverse, il produit des motifs nets mais sans lien avec l'image.
    Ensemble : fidèle **et** net. Le poids 100 pour la L1 vient du modèle de référence pix2pix.
-2. **« Comment obtenez-vous plusieurs propositions différentes ? »**
-   Grâce au canal de **bruit** en entrée : un bruit différent donne une complétion différente. Je l'ai vérifié en mesurant
-   l'écart entre 4 propositions. Si cet écart est faible, c'est l'effondrement de modes, un défaut connu des GAN conditionnels.
-   C'est justement ce que le VQ-VAE + PixelCNN doit améliorer.
-3. **« Comment savez-vous que l'entraînement s'est bien passé, et qu'il respecte la limite de 12 Go ? »**
-   Je suis les courbes de pertes (le duel doit rester équilibré, aucune des deux pertes ne doit s'effondrer à 0), le PSNR de
-   validation toutes les 10 epochs (je garde le meilleur modèle) et les exemples visuels. La mémoire est mesurée par
-   `torch.cuda.max_memory_allocated` et enregistrée dans `memoire_gpu.json`.
+2. **« Vos 4 propositions se ressemblent beaucoup. Pourquoi ? »**
+   C'est exact, et je l'ai mesuré : elles ne diffèrent que de 7 à 10 sur 255, soit environ 5 fois moins qu'elles ne diffèrent
+   de l'original. Le générateur a appris à **ignorer le bruit**, car la perte L1 le pousse vers une seule réponse « moyenne »,
+   la plus sûre. C'est l'effondrement de modes, un défaut bien connu des GAN conditionnels. C'est la raison principale
+   du passage au VQ-VAE + PixelCNN, où la diversité vient d'un vrai tirage au hasard.
+3. **« Le GAN ne gagne que 0,5 dB. Est-ce que ça valait la peine ? »**
+   Le gain est faible mais **systématique** (9 configurations sur 9), et le GAN est plus rapide (1,9 ms contre 11 ms par image),
+   pour seulement 2 Go de GPU. Surtout, le PSNR sous-estime l'écart réel : il pénalise fortement un motif net mais décalé,
+   et favorise le flou. Visuellement, le GAN reprend la bonne texture et les bonnes couleurs, ce que Telea ne fait pas.
+   Mais il ne reconstruit pas encore la géométrie (pas d'étoiles, raccord visible). Je présente donc ce résultat honnêtement,
+   comme une amélioration partielle. La L1 encore en baisse à l'epoch 150 montre qu'un entraînement plus long aiderait.
 
 ## 5) VQ-VAE + PixelCNN — *à compléter*
 

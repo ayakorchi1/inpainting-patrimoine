@@ -48,7 +48,8 @@ Environnement local : Windows + PowerShell.
 ## Déjà fait
 - `notebooks/01_exploration_preparation.ipynb` : exploration, sélection des 983 `true`, redimensionnement 128×128, masques de test.
 - `notebooks/02_baseline_opencv.ipynb` : baseline OpenCV Telea/NS. PSNR dans le trou ≈ 12 dB ; SSIM 0,91 → 0,61 de 10 % à 40 % de trou. Résultats dans `results/`.
-- `notebooks/03_gan.ipynb` : code du GAN prêt (entraînement, courbes, test 9 masques, diversité 4 propositions, figures). **Pas encore lancé sur Kaggle** : résultats à reporter dans `results/` et dans `docs/explications.md` (section 4).
+- `notebooks/03_gan.ipynb` : **GAN v1 entraîné** (150 epochs, 18 min, pic GPU 2,03 Go, meilleur modèle epoch 110). PSNR +0,47 dB en moyenne vs Telea (9/9 configs), SSIM légèrement meilleur, 1,9 ms/image. Diversité faible (7-10/255) : propositions presque identiques. Visuel : bonne texture et bonnes couleurs, mais quadrillage, pas d'étoiles, raccord visible. Fichiers : `results/*_v1.*`.
+- Convention : les résultats d'une version de modèle sont suffixés `_vN` dans `results/` (ex. `resultats_gan_v1.csv`, `memoire_gpu_gan_v1.json`). Les fichiers enregistrés depuis le navigateur peuvent arriver avec une extension `.txt` : vérifier l'extension et le contenu.
 
 ## À faire
-- Lancer le GAN sur Kaggle et reporter les résultats ; VQ-VAE + PixelCNN ; LPIPS ; démo Gradio ; docs/ (fiche modèle, éthique) ; rapport.
+- VQ-VAE + PixelCNN ; LPIPS ; éventuel GAN v2 (entraînement plus long, sélection sur SSIM/LPIPS, diversité) ; démo Gradio ; docs/ (fiche modèle, éthique) ; rapport.
