@@ -378,7 +378,7 @@ La v1 n'est pas modifiée : son code, sa config et ses résultats restent valabl
 
 | Changement | Défaut v1 visé | Pourquoi ça devrait aider |
 |---|---|---|
-| **Blocs résiduels à convolutions dilatées** (dilatations 2, 4, 8, 16) au niveau 16×16 du U-Net | Pas d'étoiles, pas de lignes qui se prolongent, raccord visible | Pour dessiner une étoile au centre d'un grand trou, le réseau doit « voir » les morceaux d'étoiles **de l'autre côté du trou**. Les blocs dilatés agrandissent ce qu'il voit (son champ réceptif) sans réduire encore l'image. |
+| **Blocs résiduels à convolutions dilatées** (dilatations 1, 2, 4, 8) au niveau 16×16 du U-Net | Pas d'étoiles, pas de lignes qui se prolongent, raccord visible | Pour dessiner une étoile au centre d'un grand trou, le réseau doit « voir » les morceaux d'étoiles **de l'autre côté du trou**. Les blocs dilatés agrandissent ce qu'il voit (son champ réceptif) sans réduire encore l'image. |
 | **300 epochs** au lieu de 150 | La L1 baissait encore à l'epoch 150 | Le modèle v1 n'avait pas fini d'apprendre. |
 | **Sélection du meilleur modèle sur le SSIM** au lieu du PSNR | Le PSNR de validation oscillait de ±0,2 dB sans tendance ; l'epoch 110 était en partie due au hasard | Le SSIM de validation montait régulièrement : c'est un critère plus stable, et plus proche de la perception de la structure. |
 
@@ -387,7 +387,7 @@ La v1 n'est pas modifiée : son code, sa config et ses résultats restent valabl
   le centre du trou est rempli « à l'aveugle », sans information venant des bords : c'est ce qui donne le grain uniforme de la v1.
 - **Convolution dilatée :** un filtre 3×3 normal regarde 9 pixels voisins collés. Un filtre dilaté de 4 regarde aussi 9 points,
   mais **espacés de 4 pixels**. Il voit donc une zone de 9×9 avec le même nombre de paramètres. En enchaînant des dilatations
-  2, 4 et 8, la vue s'élargit très vite.
+  1, 2, 4 et 8, la vue s'élargit très vite.
 - **Bloc résiduel :** le bloc calcule une **correction** qu'on ajoute à son entrée (sortie = entrée + correction), au lieu
   de tout recalculer. Au début de l'entraînement, il laisse passer l'information sans l'abîmer, ce qui rend stable l'empilement de plusieurs blocs.
 - **Pourquoi au niveau 16×16 :** à ce niveau, chaque case résume un carré de 8×8 pixels de l'image. Une dilatation de 8
@@ -400,12 +400,24 @@ La v1 n'est pas modifiée : son code, sa config et ses résultats restent valabl
   La valeur réelle sera relevée dans `memoire_gpu_gan_v2.json`.
 - Temps : environ 2 fois plus d'epochs et un réseau un peu plus lourd, donc **environ 40 min** à prévoir (v1 : 18 min).
 
-#### Point d'attention : la dilatation 16
-Sur une carte de 16×16 cases, un filtre dilaté de 16 place ses 8 points extérieurs **à 16 cases du centre, donc toujours
-en dehors de la carte**, dans le remplissage à zéro. Il ne voit donc que la case centrale et se comporte comme un simple
-mélange de canaux (convolution 1×1). Je l'ai vérifié numériquement. Ce bloc n'est pas nuisible, mais il n'élargit pas la vue.
-Les dilatations 2, 4 et 8 suffisent déjà : à elles trois, elles couvrent toute la carte 16×16, donc toute l'image.
-J'ai gardé 2, 4, 8, 16 comme prévu. La liste est réglable dans `configs/gan_v2.yaml` (`dilatations`) si l'on veut tester [1, 2, 4, 8].
+#### Pourquoi les dilatations 1, 2, 4, 8 (et pas 2, 4, 8, 16)
+Le plan initial était 2, 4, 8, 16. **On a retiré 16, parce que sur une carte 16×16, une dilatation de 16 ne voit que le centre.**
+- Un filtre 3×3 dilaté de 16 regarde la case du milieu et 8 points placés **à 16 cases** de celle-ci. Or la carte ne mesure
+  que 16 cases de large : ces 8 points tombent **toujours en dehors**, dans la bordure remplie de zéros.
+- Le filtre ne voit donc que la case centrale. Il se comporte comme une convolution 1×1 (un simple mélange des canaux,
+  sans regarder les voisins). Je l'ai vérifié numériquement : ses sorties sont identiques à celles d'une convolution 1×1.
+- Ce bloc ne cassait rien, mais il n'apportait pas ce pour quoi on l'avait ajouté : **voir plus loin**.
+
+On l'a remplacé par une dilatation de **1** (un filtre 3×3 normal, qui regarde ses voisins directs) :
+- **La vue reste complète.** J'ai mesuré quelles cases de la carte 16×16 influencent la case du centre : avec 1, 2, 4, 8,
+  ce sont les **256 cases sur 256**. Les dilatations 2, 4 et 8 suffisent à couvrir toute la carte, donc toute l'image.
+- **Les quatre blocs servent à quelque chose.** Le bloc de dilatation 1 regarde les cases juste à côté (détails proches),
+  les suivants regardent de plus en plus loin (structure globale). Une série qui commence à 1 évite que le réseau
+  « saute » systématiquement les cases voisines.
+- **Le coût ne change pas.** La dilatation écarte les points du filtre sans en ajouter : toujours 10,07 M paramètres et la même mémoire.
+
+C'est une leçon utile : un réglage qui paraît logique sur le papier (doubler la dilatation à chaque bloc) doit être
+vérifié par rapport à la **taille réelle de la carte** à laquelle il s'applique.
 
 #### Ce que la v2 ne corrige pas
 - **La diversité.** Rien dans la v2 n'oblige le générateur à utiliser le bruit, donc les 4 propositions risquent de rester

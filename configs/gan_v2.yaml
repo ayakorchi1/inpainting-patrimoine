@@ -12,7 +12,7 @@ modele:
   base_generateur: 64
   base_discriminateur: 64
   dilatation: true               # v2 : blocs résiduels dilatés au niveau 16x16
-  dilatations: [2, 4, 8, 16]
+  dilatations: [1, 2, 4, 8]     # 16 retiré : sur une carte 16x16, il ne voit que le centre
 
 entrainement:
   batch: 32

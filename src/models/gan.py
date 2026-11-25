@@ -79,7 +79,7 @@ class Generateur(nn.Module):
     v2 : Generateur(base=64, dilatation=True)        (blocs dilatés au niveau 16x16)
     """
 
-    def __init__(self, base=64, dilatation=False, dilatations=(2, 4, 8, 16)):
+    def __init__(self, base=64, dilatation=False, dilatations=(1, 2, 4, 8)):
         super().__init__()
         b = base
         self.d1 = BlocDescente(5, b, norm=False)     # 64x64
@@ -157,7 +157,7 @@ def creer_generateur(cfg_modele):
     """Construit le générateur à partir de la section `modele` d'une config (v1 ou v2)."""
     return Generateur(cfg_modele["base_generateur"],
                       dilatation=cfg_modele.get("dilatation", False),
-                      dilatations=tuple(cfg_modele.get("dilatations", (2, 4, 8, 16))))
+                      dilatations=tuple(cfg_modele.get("dilatations", (1, 2, 4, 8))))
 
 
 def compter_parametres(modele):
