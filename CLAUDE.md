@@ -1,7 +1,11 @@
 # Restaurer le patrimoine par inpainting
 
-Projet étudiant. L'utilisatrice débute : expliquer chaque action en français, simplement.
+Projet étudiant, réalisé **seule** par l'étudiante. Elle débute : expliquer chaque action en français, simplement.
 Environnement local : Windows + PowerShell.
+
+## Règle
+- **Après chaque étape, mettre à jour `docs/explications.md`** (carnet de préparation à la soutenance : ce qu'on a fait,
+  pourquoi, notions clés sans jargon, résultats et interprétation, 3 questions probables du jury avec réponses).
 
 ## Objectif
 À partir d'une image de zellige abîmée, proposer **plusieurs complétions cohérentes** de la zone manquante.
